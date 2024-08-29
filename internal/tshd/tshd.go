@@ -112,7 +112,21 @@ func handleGetFile(layer *pel.PktEncLayer) {
 		return
 	}
 	defer f.Close()
-	io.CopyBuffer(layer, f, buffer)
+
+	for {
+		n, err := f.Read(buffer)
+		if n > 0 {
+			if _, writeErr := layer.Write(buffer[:n]); writeErr != nil {
+				return
+			}
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return
+		}
+	}
 }
 
 func handlePutFile(layer *pel.PktEncLayer) {
@@ -127,7 +141,21 @@ func handlePutFile(layer *pel.PktEncLayer) {
 		return
 	}
 	defer f.Close()
-	io.CopyBuffer(f, layer, buffer)
+
+	for {
+		n, err := layer.Read(buffer)
+		if n > 0 {
+			if _, writeErr := f.Write(buffer[:n]); writeErr != nil {
+				return
+			}
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return
+		}
+	}
 	layer.Close()
 }
 
@@ -160,8 +188,34 @@ func handleRunShell(layer *pel.PktEncLayer) {
 	}
 	defer tp.Close()
 	go func() {
-		io.CopyBuffer(tp.StdIn(), layer, buffer)
+		for {
+			n, err := layer.Read(buffer)
+			if n > 0 {
+				if _, writeErr := tp.StdIn().Write(buffer[:n]); writeErr != nil {
+					return
+				}
+			}
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return
+			}
+		}
 		tp.Close()
 	}()
-	io.CopyBuffer(layer, tp.StdOut(), buffer2)
+	for {
+		n, err := tp.StdOut().Read(buffer2)
+		if n > 0 {
+			if _, writeErr := layer.Write(buffer2[:n]); writeErr != nil {
+				return
+			}
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return
+		}
+	}
 }

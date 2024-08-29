@@ -138,7 +138,22 @@ func handleGetFile(layer *pel.PktEncLayer, srcfile, dstdir string) {
 		progressbar.OptionSetDescription("Downloading"),
 		progressbar.OptionSpinnerType(22),
 	)
-	io.CopyBuffer(io.MultiWriter(f, bar), layer, buffer)
+
+	for {
+		n, err := layer.Read(buffer)
+		if n > 0 {
+			if _, writeErr := f.Write(buffer[:n]); writeErr != nil {
+				return
+			}
+			bar.Add(n)
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return
+		}
+	}
 	fmt.Print("\nDone.\n")
 }
 
@@ -169,7 +184,22 @@ func handlePutFile(layer *pel.PktEncLayer, srcfile, dstdir string) {
 		progressbar.OptionShowCount(),
 		progressbar.OptionSetDescription("Uploading"),
 	)
-	io.CopyBuffer(io.MultiWriter(layer, bar), f, buffer)
+
+	for {
+		n, err := f.Read(buffer)
+		if n > 0 {
+			if _, writeErr := layer.Write(buffer[:n]); writeErr != nil {
+				return
+			}
+			bar.Add(n)
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return
+		}
+	}
 	fmt.Print("\nDone.\n")
 }
 
@@ -212,8 +242,32 @@ func handleRunShell(layer *pel.PktEncLayer, command string) {
 	buffer := make([]byte, constants.Bufsize)
 	buffer2 := make([]byte, constants.Bufsize)
 	go func() {
-		_, _ = io.CopyBuffer(os.Stdout, layer, buffer)
+		for {
+			n, err := layer.Read(buffer)
+			if n > 0 {
+				os.Stdout.Write(buffer[:n])
+			}
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return
+			}
+		}
 		layer.Close()
 	}()
-	_, _ = io.CopyBuffer(layer, os.Stdin, buffer2)
+	for {
+		n, err := os.Stdin.Read(buffer2)
+		if n > 0 {
+			if _, writeErr := layer.Write(buffer2[:n]); writeErr != nil {
+				return
+			}
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return
+		}
+	}
 }
